@@ -1,85 +1,57 @@
-# My Application README
+# Contact Manager — Vaadin Learning Project
 
-- [ ] TODO Replace or update this README with instructions relevant to your application
+App CRUD de contactos para aprender Vaadin Framework 25.x paso a paso.
 
-## Project Structure
+## Tech Stack
 
-This project has the following structure:
+- **Vaadin** 25.1.8 (Flow)
+- **Spring Boot** 4.0.7
+- **Spring Data JPA**
+- **H2** (in-memory DB)
+- **Java** 25
+- **Lombok**
+
+## Estructura
 
 ```
-src
-├── main/java
-│   └── [application package]
-│       ├── base
-│       │   └── ui
-│       │       ├── MainLayout.java
-│       │       └── ViewTitle.java
-│       ├── examplefeature
-│       │   ├── ui
-│       │   │   └── TaskListView.java
-│       │   ├── Task.java
-│       │   ├── TaskRepository.java
-│       │   └── TaskService.java                
-│       └── Application.java     
-├── main/resources
-│   ├── META-INF
-│   │   └── resources
-│   │       ├── icons
-│   │       │   └── clipboard-check.svg
-│   │       ├── styles.css
-│   │       └── view-title.css
-│   └── application.properties 
-└── test/java
-    └── [application package]
-        └── examplefeature
-            ├── ui
-            │   └── TaskListViewTest.java
-            └── TaskServiceTest.java                 
+src/main/java/com/example/
+├── Application.java              # Entry point
+├── base/ui/
+│   └── MainLayout.java          # Layout con SideNav
+└── examplefeature/
+    ├── Contacto.java            # Entidad JPA
+    ├── ContactoRepository.java # Spring Data repository
+    ├── ContactoService.java     # Lógica de negocio
+    └── ui/
+        └── ContactoListView.java # Vista principal
 ```
 
-The main entry point into the application is `Application.java`. This class contains the `main()` method that starts up 
-the Spring Boot application.
-
-The project follows a *feature-based package structure*, organizing code by *functional units* rather than traditional 
-architectural layers. It includes two feature packages: `base` and `examplefeature`.
-
-* The `base` package contains classes meant for reuse across different features, either through composition or 
-  inheritance. You can use them as-is, tweak them to your needs, or remove them.
-* The `examplefeature` package is an example feature package that demonstrates the structure. It represents a 
-  *self-contained unit of functionality*, including UI components, business logic, data access, and an integration test.
-  Once you create your own features, *you'll remove this package*.
-
-
-## Starting in Development Mode
-
-To start the application in development mode, import it into your IDE and run the `Application` class. 
-You can also start the application from the command line by running: 
+## Ejecutar
 
 ```bash
-./mvnw
+mvn spring-boot:run
 ```
 
-## Building for Production
+Abrir http://localhost:8080
 
-To build the application in production mode, run:
+## Build
 
 ```bash
-./mvnw package
+mvn clean package -DskipTests
+java -jar target/app-1.0-SNAPSHOT.jar
 ```
 
-To build a Docker image, run:
+## Roadmap
 
-```bash
-docker build -t my-application:latest .
-```
+- [x] Fase 1-4: Entidad, Repository, Service, Vista básica con Grid
+- [ ] Fase 5: Formulario de creación
+- [ ] Fase 6: Lazy loading con filtro
+- [ ] Fase 7: Eliminar contacto
+- [ ] Fase 8: Editar contacto con Dialog
 
-If you use commercial components, pass the license key as a build secret:
+Ver [vaadin-learning-project.md](./vaadin-learning-project.md) para guía paso a paso.
 
-```bash
-docker build --secret id=proKey,src=$HOME/.vaadin/proKey .
-```
+## Recursos
 
-## Next Steps
-
-The [Building Apps](https://vaadin.com/docs/v25/building-apps) guides contain hands-on advice for adding features to 
-your application.
+- [Vaadin Docs](https://vaadin.com/docs/)
+- [Book of Vaadin](https://vaadin.com/docs/book/)
