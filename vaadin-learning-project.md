@@ -47,10 +47,20 @@ Crea package `com.example.examplefeature` y archivo `Contacto.java`:
 package com.example.examplefeature;
 
 import jakarta.persistence.*;
+import lombok.EqualsAndHashCode;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
+import lombok.ToString;
 import org.jspecify.annotations.Nullable;
 
 @Entity
 @Table(name = "contacto")
+@Getter
+@Setter
+@ToString
+@EqualsAndHashCode
+@NoArgsConstructor
 public class Contacto {
 
     @Id
@@ -69,33 +79,10 @@ public class Contacto {
     @Nullable
     private String telefono;
 
-    protected Contacto() {}
-
-    public Contacto(String nombre, String email, String telefono) {
+    public Contacto(String nombre, @Nullable String email, @Nullable String telefono) {
         this.nombre = nombre;
         this.email = email;
         this.telefono = telefono;
-    }
-
-    public Long getId() { return id; }
-    public String getNombre() { return nombre; }
-    public void setNombre(String nombre) { this.nombre = nombre; }
-    public @Nullable String getEmail() { return email; }
-    public void setEmail(@Nullable String email) { this.email = email; }
-    public @Nullable String getTelefono() { return telefono; }
-    public void setTelefono(@Nullable String telefono) { this.telefono = telefono; }
-
-    @Override
-    public boolean equals(Object obj) {
-        if (obj == null || !getClass().isAssignableFrom(obj.getClass())) return false;
-        if (obj == this) return true;
-        Contacto other = (Contacto) obj;
-        return getId() != null && getId().equals(other.getId());
-    }
-
-    @Override
-    public int hashCode() {
-        return getClass().hashCode();
     }
 }
 ```
@@ -103,8 +90,9 @@ public class Contacto {
 Concepts:
 - `GenerationType.SEQUENCE` — ID autogenerado por sequence de DB
 - `@Nullable` de `org.jspecify.annotations` — nullabilidad para compiler
-- `protected Contacto()` — constructor requerido por JPA/Hibernate
-- `equals`/`hashCode` basados en `id` — requeridos por JPA y colecciones
+- `protected Contacto()` — constructor requerido por JPA/Hibernate (Lombok genera)
+- Lombok: `@Getter @Setter @ToString @EqualsAndHashCode @NoArgsConstructor`
+- Constructor 3-args manual — Lombok no puede generarlo sin `final` fields
 
 ---
 
@@ -322,37 +310,94 @@ Concepts:
 
 ---
 
-## Fase 6: Lazy loading con filter
+## Fase 6: Lazy loading con filtro
 
-Modificá para que el Grid cargue lazy (paginación) y el filtro funcione:
+### Por qué lazy loading?
+
+En la Fase 4-5 el Grid cargaba **todos** los contactos de una vez en memoria. Con muchos datos esto es:
+- **Lento**: espera a cargar todo antes de mostrar
+- **Costoso**: consume mucha memoria
+
+Con lazy loading, el Grid pide datos **solo para la porción visible** y cuando necesita más (scroll).
+
+### Cambios en ContactoListView.java
+
+**1. Agregar import:**
 
 ```java
 import static com.vaadin.flow.spring.data.VaadinSpringDataHelpers.toSpringPageRequest;
-
-// En constructor, configurar grid con lazy loading:
-grid.setItems(query -> service.list(toSpringPageRequest(query), filtro.getValue()).stream());
-
-// En toolbar:
-private final TextField filtro = new TextField("Buscar");
-private final TextField nombre = new TextField("Nombre");
-private final TextField email = new TextField("Email");
-private final TextField telefono = new TextField("Teléfono");
-private final Button guardar = new Button("Guardar");
-
-// En createToolbar():
-filtro.setPlaceholder("Buscar por nombre...");
-filtro.setClearButtonVisible(true);
-filtro.addValueChangeListener(e -> grid.getDataProvider().refreshAll());
-
-HorizontalLayout toolbar = new HorizontalLayout(filtro);
-toolbar.setWidthFull();
 ```
 
-Concepts:
-- `setItems(query -> ...)` — lazy loading. Se ejecuta cada vez que el Grid necesita datos
-- `VaadinSpringDataHelpers.toSpringPageRequest(query)` — convierte query de Vaadin a Spring Pageable
-- `addValueChangeListener` — dispara refresh al escribir en filtro
-- `setClearButtonVisible(true)` — botón X para limpiar el campo
+**2. Agregar campo filtro en la clase:**
+
+```java
+private final TextField filtro = new TextField("Buscar");
+```
+
+**3. Cambiar cómo el Grid obtiene datos — en el constructor:**
+
+```java
+// ANTES (carga todo de una vez):
+grid.setItems(service.list(Pageable.unpaged(), null).stream());
+
+// DESPUÉS (carga lazy, solo lo que el Grid necesita):
+grid.setItems(query -> service.list(
+    toSpringPageRequest(query),    // Vaadin query → Spring Pageable
+    filtro.getValue()              // texto del filtro
+).stream());
+```
+
+**4. Configurar el TextField de filtro — en createToolbar():**
+
+```java
+private HorizontalLayout createToolbar() {
+    filtro.setPlaceholder("Buscar por nombre...");
+    filtro.setClearButtonVisible(true);
+
+    // Cada vez que el usuario escribe, recargar datos del Grid
+    filtro.addValueChangeListener(e ->
+        grid.getDataProvider().refreshAll()
+    );
+
+    return new HorizontalLayout(filtro);
+}
+```
+
+### Cómo funciona el flujo
+
+```
+Usuario escribe "Juan"
+    ↓
+filtro.addValueChangeListener() dispara
+    ↓
+grid.getDataProvider().refreshAll()
+    ↓
+Grid pide datos invocando el callback
+    ↓
+service.list(toSpringPageRequest(query), "Juan")
+    ↓
+Repository ejecuta query con filtro LIKE '%Juan%'
+    ↓
+Grid muestra solo contactos que coinciden
+```
+
+### Conversión de query
+
+`VaadinSpringDataHelpers.toSpringPageRequest(query)` convierte:
+
+| Vaadin Query | Spring Pageable |
+|--------------|-----------------|
+| página 0, size 20 | `PageRequest.of(0, 20)` |
+| página 2, size 20 | `PageRequest.of(2, 20)` |
+| con orden por nombre | `PageRequest.of(..., Sort.by("nombre"))` |
+
+### Concepts
+
+- `setItems(query -> ...)` — callback de lazy loading. Se ejecuta **cada vez** que el Grid necesita datos (scroll, paginación, refresh)
+- `VaadinSpringDataHelpers.toSpringPageRequest(query)` — traduce la query de Vaadin (página actual, tamaño, orden) a `Pageable` de Spring Data
+- `addValueChangeListener(e -> ...)` — se dispara cuando el valor del TextField cambia y el usuario presiona Enter o el campo pierde foco
+- `setClearButtonVisible(true)` — agrega botón X que limpia el campo y dispara el listener
+- `refreshAll()` — le dice al Grid que olvide sus datos en caché y vuelva a invocar el callback
 
 ---
 
@@ -361,7 +406,7 @@ Concepts:
 Agregar columna de acciones al Grid:
 
 ```java
-grid.addColumn(contacto -> {
+grid.addComponentColumn(contacto -> {
     Button deleteBtn = new Button("Eliminar", e -> eliminarContacto(contacto));
     return deleteBtn;
 }).setHeader("Acciones").setAutoWidth(false);
@@ -374,6 +419,10 @@ private void eliminarContacto(Contacto contacto) {
         .addThemeVariants(NotificationVariant.SUCCESS);
 }
 ```
+
+Concepts:
+- `addComponentColumn` — para renderizar componentes (Button) en una columna
+- `addColumn` — para valores simples (String, etc), llama `toString()`
 
 ---
 
@@ -453,7 +502,7 @@ Concepts:
 
 ```java
 // En grid, columna de acciones:
-grid.addColumn(contacto -> {
+grid.addComponentColumn(contacto -> {
     Button editBtn = new Button("Editar", e -> editarContacto(contacto));
     Button deleteBtn = new Button("Eliminar", e -> eliminarContacto(contacto));
     return new HorizontalLayout(editBtn, deleteBtn);
@@ -519,7 +568,7 @@ java -jar target/app-1.0-SNAPSHOT.jar
 | 4 | `@Route`, `@Menu`, `@Layout`, `Grid`, `TextField`, `VerticalLayout` |
 | 5 | Validación con `setInvalid`, `Notification`, `DataProvider.refreshAll()` |
 | 6 | Lazy loading con `setItems(query -> ...)`, `VaadinSpringDataHelpers` |
-| 7 | Columna de acciones, delete |
+| 7 | `addComponentColumn`, columna de acciones, delete |
 | 8 | `Dialog`, `Binder`, `readBean`/`writeBean`, edit completo |
 
 ---
